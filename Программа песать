@@ -1,0 +1,235 @@
+package com.example.sealmaker;
+
+import android.content.Context;
+import android.graphics.*;
+import android.util.AttributeSet;
+import android.view.View;
+import androidx.annotation.Nullable;
+
+public class SealView extends View {
+    private Paint borderPaint;
+    private Paint fillPaint;
+    private Paint textPaint;
+    
+    private Path borderPath;
+    private Path textPath;
+    
+    private String shape = "circle";
+    private String text = "ПЕЧАТЬ";
+    private int size = 300;
+    private int borderColor = Color.RED;
+    private int fillColor = Color.TRANSPARENT;
+    private int textColor = Color.BLUE;
+    private float textSizeRatio = 0.15f; // Отношение к размеру печати
+
+    // Флаги для обновления только измененных элементов
+    private boolean borderPathDirty = true;
+    private boolean textPathDirty = true;
+
+    public SealView(Context context) {
+        super(context);
+        init();
+    }
+
+    public SealView(Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+        init();
+    }
+
+    private void init() {
+        // Настройка контура
+        borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        borderPaint.setStyle(Paint.Style.STROKE);
+        borderPaint.setStrokeWidth(8);
+        borderPaint.setColor(borderColor);
+        
+        // Настройка заливки
+        fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        fillPaint.setStyle(Paint.Style.FILL);
+        fillPaint.setColor(fillColor);
+        
+        // Настройка текста
+        textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        textPaint.setTextAlign(Paint.Align.CENTER);
+        textPaint.setColor(textColor);
+        
+        // Инициализация путей
+        borderPath = new Path();
+        textPath = new Path();
+    }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        
+        int centerX = getWidth() / 2;
+        int centerY = getHeight() / 2;
+        int radius = size / 2;
+        
+        // Обновление путей при необходимости
+        if (borderPathDirty) {
+            updateBorderPath(centerX, centerY, radius);
+            borderPathDirty = false;
+        }
+        
+        if (textPathDirty) {
+            updateTextPath(centerX, centerY, radius);
+            textPathDirty = false;
+        }
+        
+        // Рисование фигуры (сначала заливка, потом контур)
+        if (fillPaint.getColor() != Color.TRANSPARENT) {
+            canvas.drawPath(borderPath, fillPaint);
+        }
+        canvas.drawPath(borderPath, borderPaint);
+        
+        // Рисование текста
+        if (!text.isEmpty() && !textPath.isEmpty()) {
+            canvas.drawTextOnPath(text, textPath, 0, 0, textPaint);
+        }
+    }
+
+    private void updateBorderPath(int centerX, int centerY, int radius) {
+        borderPath.reset();
+        
+        switch (shape) {
+            case "circle":
+                borderPath.addCircle(centerX, centerY, radius, Path.Direction.CW);
+                break;
+            case "square":
+                borderPath.addRect(centerX - radius, centerY - radius, 
+                                 centerX + radius, centerY + radius, Path.Direction.CW);
+                break;
+            case "triangle":
+                createTrianglePath(centerX, centerY, radius);
+                break;
+            case "star":
+                createStarPath(centerX, centerY, radius);
+                break;
+        }
+    }
+
+    private void updateTextPath(int centerX, int centerY, int radius) {
+        textPath.reset();
+        
+        if (text.isEmpty()) return;
+        
+        // Расчет базового размера текста
+        float baseTextSize = size * textSizeRatio;
+        textPaint.setTextSize(baseTextSize);
+        
+        // Обработка разных форм
+        if ("circle".equals(shape)) {
+            // Текст по кругу с автоматической подгонкой
+            Rect bounds = new Rect();
+            textPaint.getTextBounds(text, 0, text.length(), bounds);
+            float circumference = (float) (2 * Math.PI * radius * 0.8);
+            float scale = circumference / bounds.width();
+            
+            textPaint.setTextSize(baseTextSize * Math.min(scale, 1.2f));
+            textPath.addCircle(centerX, centerY, radius * 0.8f, Path.Direction.CW);
+        } else {
+            // Горизонтальный текст для других форм
+            Rect bounds = new Rect();
+            textPaint.getTextBounds(text, 0, text.length(), bounds);
+            
+            // Подгонка размера текста под ширину фигуры
+            float maxWidth = size * 0.9f;
+            if (bounds.width() > maxWidth) {
+                textPaint.setTextSize(baseTextSize * maxWidth / bounds.width());
+            }
+            
+            // Позиционирование в центре
+            float yPos = centerY - (textPaint.descent() + textPaint.ascent()) / 2;
+            textPath.moveTo(centerX - maxWidth/2, yPos);
+            textPath.lineTo(centerX + maxWidth/2, yPos);
+        }
+    }
+
+    private void createTrianglePath(int centerX, int centerY, int radius) {
+        borderPath.moveTo(centerX, centerY - radius); 
+        borderPath.lineTo(centerX - radius, centerY + radius); 
+        borderPath.lineTo(centerX + radius, centerY + radius); 
+        borderPath.close();
+    }
+
+    private void createStarPath(int centerX, int centerY, int radius) {
+        int spikes = 5;
+        float rotation = - (float) Math.PI / 2;
+        float step = (float) (2 * Math.PI / spikes);
+        
+        borderPath.moveTo(
+            centerX + (radius * (float) Math.cos(rotation)),
+            centerY + (radius * (float) Math.sin(rotation))
+        );
+        
+        for (int i = 1; i <= spikes; i++) {
+            // Внешняя точка
+            float x = centerX + (radius * (float) Math.cos(rotation + step * i));
+            float y = centerY + (radius * (float) Math.sin(rotation + step * i));
+            borderPath.lineTo(x, y);
+            
+            // Внутренняя точка
+            x = centerX + ((radius / 2) * (float) Math.cos(rotation + step * i + step / 2));
+            y = centerY + ((radius / 2) * (float) Math.sin(rotation + step * i + step / 2));
+            borderPath.lineTo(x, y);
+        }
+        borderPath.close();
+    }
+
+    // Методы для обновления свойств
+    public void setShape(String shape) {
+        if (!this.shape.equals(shape)) {
+            this.shape = shape;
+            borderPathDirty = true;
+            textPathDirty = true;
+            invalidate();
+        }
+    }
+
+    public void setSize(int size) {
+        if (this.size != size) {
+            this.size = size;
+            borderPathDirty = true;
+            textPathDirty = true;
+            invalidate();
+        }
+    }
+
+    public void setText(String text) {
+        if (!this.text.equals(text)) {
+            this.text = text;
+            textPathDirty = true;
+            invalidate();
+        }
+    }
+
+    public void setBorderColor(int color) {
+        if (borderPaint.getColor() != color) {
+            borderPaint.setColor(color);
+            invalidate();
+        }
+    }
+
+    public void setFillColor(int color) {
+        if (fillPaint.getColor() != color) {
+            fillPaint.setColor(color);
+            invalidate();
+        }
+    }
+
+    public void setTextColor(int color) {
+        if (textPaint.getColor() != color) {
+            textPaint.setColor(color);
+            invalidate();
+        }
+    }
+
+    public void setTextSizeRatio(float ratio) {
+        if (textSizeRatio != ratio) {
+            textSizeRatio = Math.min(Math.max(ratio, 0.1f), 0.3f);
+            textPathDirty = true;
+            invalidate();
+        }
+    }
+}
